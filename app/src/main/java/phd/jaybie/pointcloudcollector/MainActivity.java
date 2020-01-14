@@ -12,6 +12,9 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import com.google.ar.core.Anchor;
@@ -31,6 +34,8 @@ import com.google.ar.sceneform.ux.TransformableNode;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.FloatBuffer;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,6 +43,8 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
     private ArFragment fragment;
+
+    private AutoCompleteTextView fileName;
 
     private PointerDrawable pointer = new PointerDrawable();
     private boolean isTracking;
@@ -47,21 +54,41 @@ public class MainActivity extends AppCompatActivity {
 
     private List<Plane> PlaneList = new ArrayList<Plane>();
 
+    private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss");
+
+    private Timestamp timestamp;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        fileName = (AutoCompleteTextView) findViewById(R.id.fileText);
         setSupportActionBar(toolbar);
 
         fragment = (ArFragment) getSupportFragmentManager().findFragmentById(R.id.sceneform_fragment);
+
+        final String[] SPACES = new String[] {
+                "workstation", "reception", "apartment", "driveway", "hallway",
+                "kitchen","stairwell"
+        };
+
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
+                android.R.layout.simple_dropdown_item_1line, SPACES);
+        fileName.setAdapter(adapter);
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
+                Snackbar.make(view, "Saving data to "+ fileName.getText().toString(),
+                        Snackbar.LENGTH_LONG)
                         .setAction("Action", null).show();
+
+                timestamp = new Timestamp(System.currentTimeMillis());
+
+                savePlaneCloudToFile();
+                savePointCloudToFile();
             }
         });
 
@@ -104,19 +131,6 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    @Override
-    protected void onPause(){
-        super.onPause();
-        savePlaneCloudToFile();
-        savePointCloudToFile();
-    }
-
-    @Override
-    protected void onStop(){
-        super.onStop();
-        savePlaneCloudToFile();
-        savePointCloudToFile();
-    }
 
     private void addPlaneToList(Plane planeTrackable){
 
@@ -158,7 +172,8 @@ public class MainActivity extends AppCompatActivity {
     private void savePlaneCloudToFile() {
 
         File path = this.getApplicationContext().getExternalFilesDir(null);
-        File file = new File(path, "planecloud.txt");
+        File file = new File(path,
+                fileName.getText().toString() +"-"+ sdf.format(timestamp)+"-planecloud.txt");
 
         Session session = fragment.getArSceneView().getSession();
 
@@ -171,11 +186,13 @@ public class MainActivity extends AppCompatActivity {
 
                     Pose planePose = ((Plane) listedPlane).getCenterPose();
 
-                    String planePolygonString = "Pose " + Float.toString(planePose.tx()) + ","
-                            + (planePose.tx()) + "," + (planePose.tx()) + "\n";
+                    String planePolygonString = "Pose," + Float.toString(planePose.tx()) + ","
+                            + (planePose.ty()) + "," + (planePose.tz()) +  ","
+                            + (planePose.qx()) + "," + (planePose.qy()) + ","
+                            + (planePose.qz()) + "," + (planePose.qw()) + "\n";
 
                     while (planePolygon.hasRemaining()) {
-                        planePolygonString = planePolygonString + Float.toString(planePolygon.get()) + ", "
+                        planePolygonString = planePolygonString + Float.toString(planePolygon.get()) + ","
                                 + Float.toString(planePolygon.get()) + "\n";
                     }
 
@@ -200,7 +217,8 @@ public class MainActivity extends AppCompatActivity {
     private void savePointCloudToFile(){
 
         File path = this.getApplicationContext().getExternalFilesDir(null);
-        File file = new File(path, "pointcloud.txt");
+        File file = new File(path,
+                fileName.getText().toString() + "-"+sdf.format(timestamp)+"-pointcloud.txt");
 
         Frame frame = fragment.getArSceneView().getArFrame();
 
@@ -210,9 +228,9 @@ public class MainActivity extends AppCompatActivity {
             String pointcloudString = "";
 
             while (pointcloudBuffer.hasRemaining()) {
-                pointcloudString = pointcloudString + Float.toString(pointcloudBuffer.get()) + ", "
-                        + Float.toString(pointcloudBuffer.get()) + ", "
-                        + Float.toString(pointcloudBuffer.get()) + ", "
+                pointcloudString = pointcloudString + Float.toString(pointcloudBuffer.get()) + ","
+                        + Float.toString(pointcloudBuffer.get()) + ","
+                        + Float.toString(pointcloudBuffer.get()) + ","
                         + Float.toString(pointcloudBuffer.get()) + "\n";
             }
 
