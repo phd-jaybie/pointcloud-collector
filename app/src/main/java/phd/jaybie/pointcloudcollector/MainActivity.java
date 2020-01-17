@@ -39,6 +39,12 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Originally the sample sceneform activity from ARCore Tutorials.
+ *
+ * Modified to be used for capturing point clouds and planes that are provided to applications.
+ */
+
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
@@ -68,15 +74,23 @@ public class MainActivity extends AppCompatActivity {
 
         fragment = (ArFragment) getSupportFragmentManager().findFragmentById(R.id.sceneform_fragment);
 
+        /**
+         * Adding suggestions, i.e. SPACES, to the Filename Text field.
+         * It shows as a drop down list.
+         */
         final String[] SPACES = new String[] {
                 "workstation", "reception", "apartment", "driveway", "hallway",
                 "kitchen","stairwell"
         };
-
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
                 android.R.layout.simple_dropdown_item_1line, SPACES);
         fileName.setAdapter(adapter);
 
+        /**
+         * This button handles the saving action.
+         * Gets a timestamp, shows a message on snackbar for visual feedback,
+         * and calls savePlaneCloudToFile() and savePointCloudToFile().
+         */
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -95,7 +109,6 @@ public class MainActivity extends AppCompatActivity {
         fragment.getArSceneView().getScene().addOnUpdateListener(frameTime -> {
             fragment.onUpdate(frameTime);
             onUpdate();
-            //savePlaneCloudToFile();
         });
 
         ModelRenderable.builder()
@@ -113,6 +126,12 @@ public class MainActivity extends AppCompatActivity {
                         });
 
 
+        /**
+         * When the user taps on the screen, the 2D screen position is translated to 3D position
+         * and ARCore checks whether a TRACKABLE (either a point or a plane) is 'hit' by the tap.
+         *
+         * IF a TRACKABLE is hit, it is used as an anchor on which an "Andy" us rendered over.
+         */
         fragment.setOnTapArPlaneListener(
                 (HitResult hitResult, Plane plane, MotionEvent motionEvent) -> {
                     if (andyRenderable == null) {
@@ -131,71 +150,49 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-
-    private void addPlaneToList(Plane planeTrackable){
-
-        if (PlaneList.isEmpty()){
-            PlaneList.add(planeTrackable);
-            return;
-        }
-
-        Boolean addPlane = false;
-        Plane subsumingPlane =  planeTrackable;
-        Plane subsumedPlane = planeTrackable;
-
-        Session session = fragment.getArSceneView().getSession();
-
-        for (Plane listedPlane: PlaneList){
-
-            subsumingPlane = listedPlane.getSubsumedBy();
-            subsumedPlane = listedPlane;
-
-            if (planeTrackable.equals(subsumingPlane)) {
-                addPlane = false;
-            } else {
-                addPlane = true;
-            }
-        }
-
-        if (addPlane) {
-            PlaneList.add(planeTrackable);
-            Log.i(TAG,"Added a new plane.");
-        } else {
-            PlaneList.remove(subsumedPlane);
-            PlaneList.add(subsumingPlane);
-            Log.i(TAG,"Replacing subsumed plane.");
-        }
-
-        return;
-    }
-
+    /**
+     * Saves the plane cloud of the current scene to file.
+     * */
     private void savePlaneCloudToFile() {
 
+        // Setting the file path and adding the timestamp to the file name.
         File path = this.getApplicationContext().getExternalFilesDir(null);
         File file = new File(path,
                 fileName.getText().toString() +"-"+ sdf.format(timestamp)+"-planecloud.txt");
 
+        // Getting the session.
         Session session = fragment.getArSceneView().getSession();
 
         try {
+
+            // Set the output file stream buffer.
             FileOutputStream stream = new FileOutputStream(file);
             try {
+
+                // Get the Plane.class TRACKABLES of the current session.
                 for (Plane listedPlane: session.getAllTrackables(Plane.class)){//PlaneList) {
 
+                    // Get the polygon (e.g. x and z points if horizontal) of the plane which is
+                    // a byte buffer.
                     FloatBuffer planePolygon = ((Plane) listedPlane).getPolygon();
 
+                    // Get the pose of the plane. Then, get the translation of the pose.
+                    // Store the pose translation information as the head information of a plane in
+                    // the array string.
                     Pose planePose = ((Plane) listedPlane).getCenterPose();
-
                     String planePolygonString = "Pose," + Float.toString(planePose.tx()) + ","
                             + (planePose.ty()) + "," + (planePose.tz()) +  ","
                             + (planePose.qx()) + "," + (planePose.qy()) + ","
                             + (planePose.qz()) + "," + (planePose.qw()) + "\n";
 
+                    // Iterate the contents of the buffer, and concatenate the polygon points
+                    // in the array string.
                     while (planePolygon.hasRemaining()) {
                         planePolygonString = planePolygonString + Float.toString(planePolygon.get()) + ","
                                 + Float.toString(planePolygon.get()) + "\n";
                     }
 
+                    // Add two new lines to separate planes.
                     planePolygonString = planePolygonString + "\n\n";
 
                     stream.write(planePolygonString.getBytes());
@@ -214,26 +211,38 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    /**
+     * Saves the point cloud of the current frame to file.
+     * */
     private void savePointCloudToFile(){
 
+        // Setting the file path and adding the timestamp to the file name.
         File path = this.getApplicationContext().getExternalFilesDir(null);
         File file = new File(path,
                 fileName.getText().toString() + "-"+sdf.format(timestamp)+"-pointcloud.txt");
 
+        // Getting the frame.
         Frame frame = fragment.getArSceneView().getArFrame();
 
+        // Extract the point cloud from the frame.
         try (PointCloud pointCloud = frame.acquirePointCloud()){
+
+            // The points are stored in a buffer.
             FloatBuffer pointcloudBuffer = pointCloud.getPoints();
 
             String pointcloudString = "";
 
+            // Iterate the contents of the buffer and save as array string.
             while (pointcloudBuffer.hasRemaining()) {
+
+                // We perform 4 GET commands: x ,y ,z, c (confidence).
                 pointcloudString = pointcloudString + Float.toString(pointcloudBuffer.get()) + ","
                         + Float.toString(pointcloudBuffer.get()) + ","
                         + Float.toString(pointcloudBuffer.get()) + ","
                         + Float.toString(pointcloudBuffer.get()) + "\n";
             }
 
+            // Store the array string containing the points from the point cloud to file.
             try {
                 FileOutputStream stream = new FileOutputStream(file);
                 try {
@@ -251,6 +260,9 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    /**
+     * During an ARCore scene update, a green pointer appears when TRACKING state.
+     * */
     private void onUpdate() {
         boolean trackingChanged = updateTracking();
         View contentView = findViewById(android.R.id.content);
@@ -292,13 +304,6 @@ public class MainActivity extends AppCompatActivity {
                 if (trackable instanceof Plane &&
                         ((Plane) trackable).isPoseInPolygon(hit.getHitPose())) {
                     isHitting = true;
-
-                    /**
-                     * Insert code here that gets the Plane polygon
-                     * **/
-
-                    addPlaneToList((Plane) trackable);
-
                     break;
 
                 }
